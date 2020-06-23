@@ -1,15 +1,15 @@
 #include "parser.h"
 
+#include <complex.h>
 #include <ctype.h>
 #include <errno.h>
 #include <float.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "parameters.h"
 
 
 enum ComplexPart
@@ -31,8 +31,7 @@ static size_t stripWhitespace(char *dest, const char *src, size_t n);
 
 
 /* Convert string to unsigned long and handle errors */
-int stringToULong(unsigned long int *x, const char *nptr, unsigned long int min, unsigned long int max,
-                     char **endptr, int base)
+int stringToULong(unsigned long *x, const char *nptr, unsigned long min, unsigned long max, char **endptr, int base)
 {
     char sign;
 
@@ -146,10 +145,10 @@ int stringToDouble(double *x, const char *nptr, double min, double max, char **e
  *   - It can be preceded by an optional '+' or '-' sign
  *   - An imaginary number must be followed by the imaginary unit
  */
-int stringToImaginary(struct ComplexNumber *z, char *nptr, struct ComplexNumber min, struct ComplexNumber max,
-                         char **endptr, int *type)
+int stringToImaginary(complex *z, char *nptr, complex min, complex max, char **endptr, int *type)
 {
     double x;
+
     int sign;
     enum ParserErrorCode parseError;
 
@@ -157,14 +156,18 @@ int stringToImaginary(struct ComplexNumber *z, char *nptr, struct ComplexNumber 
      * Manually parsing the sign enables detection of a complex unit lacking in
      * a coefficient but having a '+'/'-' sign
      */
-    if ((sign = parseSign(nptr, endptr)) == 0)
+    sign = parseSign(nptr, endptr);
+
+    if (!sign)
         sign = 1;
+
     /*
      * Because the sign has been manually parsed, error on a second sign, which
      * strtod() will not detect
      */
     nptr = *endptr;
-    if (parseSign(nptr, endptr) != 0)
+
+    if (parseSign(nptr, endptr))
         return PARSER_ERROR;
 
     nptr = *endptr;
@@ -191,14 +194,14 @@ int stringToImaginary(struct ComplexNumber *z, char *nptr, struct ComplexNumber 
     switch(*type)
     {
         case COMPLEX_REAL:
-            if (x < min.re || x > max.re)
+            if (x < creal(min) || x > creal(max))
                 return PARSER_ERANGE;
-            z->re = x;
+            *z = x + cimag(*z) * I;
             return PARSER_NONE;
         case COMPLEX_IMAGINARY:
-            if (x < min.im || x > max.im)
+            if (x < cimag(min) || x > cimag(max))
                 return PARSER_ERANGE;
-            z->im = x;
+            *z = creal(*z) + x * I;
             return PARSER_NONE;
         default:
             return PARSER_ERROR;
@@ -207,7 +210,7 @@ int stringToImaginary(struct ComplexNumber *z, char *nptr, struct ComplexNumber 
 
 
 /* 
- * Parse a complex number string into a {real, imaginary} struct
+ * Parse a complex number string into a complex variable
  * 
  * Input must be of the form:
  *   "a + bi" or
@@ -221,14 +224,13 @@ int stringToImaginary(struct ComplexNumber *z, char *nptr, struct ComplexNumber 
  *     invalid)
  *   - Either parts can be omitted - the missing part will be interpreted as 0.0
  */
-int stringToComplex(struct ComplexNumber *z, char *nptr, struct ComplexNumber min, struct ComplexNumber max, 
-                       char **endptr)
+int stringToComplex(complex *z, char *nptr, complex min, complex max, char **endptr)
 {
     char *buffer;
     size_t nptrSize = strlen(nptr) + 1;
 
     int parseError, type;
-    _Bool reFlag = 0, imFlag = 0;
+    bool reFlag = 0, imFlag = 0;
     int operator;
 
     buffer = malloc(nptrSize);
@@ -241,7 +243,7 @@ int stringToComplex(struct ComplexNumber *z, char *nptr, struct ComplexNumber mi
     nptr = buffer;
     *endptr = nptr;
 
-    z->re = z->im = 0.0;
+    *z = 0.0 + 0.0 * I;
 
     /* Get first operand in complex number */
     parseError = stringToImaginary(z, nptr, min, max, endptr, &type);
@@ -273,7 +275,9 @@ int stringToComplex(struct ComplexNumber *z, char *nptr, struct ComplexNumber mi
 
     /* Get operator between the two parts */
     nptr = *endptr;
-    if ((operator = parseSign(nptr, endptr)) == 0)
+    operator = parseSign(nptr, endptr);
+
+    if (!operator)
     {
         free(buffer);
         return PARSER_ERROR;
@@ -293,11 +297,11 @@ int stringToComplex(struct ComplexNumber *z, char *nptr, struct ComplexNumber mi
     {
         case COMPLEX_REAL:
             reFlag = 1;
-            z->re *= operator;
+            *z = operator * creal(*z) + cimag(*z) * I;
             break;
         case COMPLEX_IMAGINARY:
             imFlag = 1;
-            z->im *= operator;
+            *z = creal(*z) + operator * cimag(*z) * I;
             break;
         default:
             free(buffer);
@@ -313,7 +317,7 @@ int stringToComplex(struct ComplexNumber *z, char *nptr, struct ComplexNumber mi
     free(buffer);
 
     /* If both flags have not been set */
-    if (!(reFlag && imFlag))
+    if (!reFlag || !imFlag)
         return PARSER_ERROR;
 
     return PARSER_NONE;
@@ -324,6 +328,7 @@ int stringToComplex(struct ComplexNumber *z, char *nptr, struct ComplexNumber mi
 static int parseSign(char *c, char **endptr)
 {
     *endptr = c;
+
     switch (*c)
     {
         case '+':
@@ -342,23 +347,25 @@ static int parseSign(char *c, char **endptr)
 static int parseImaginaryUnit(char *c, char **endptr)
 {
     *endptr = c;
+
     if (*c != IMAGINARY_UPPER && *c != IMAGINARY_LOWER)
         return COMPLEX_REAL;
 
     ++(*endptr);
+
     return COMPLEX_IMAGINARY;
 }
 
 
 /* 
- * Strip `src` of white-space then copy a maximum of `n` characters (including
- * the null terminator) into `dest` - return the length of `dest`
+ * Strip src of white-space then copy a maximum of n characters (including the
+ * null terminator) into dest - return the length of dest
  */
 static size_t stripWhitespace(char *dest, const char *src, size_t n)
 {
-    size_t i, j;
+    size_t j = 0;
 
-    for (i = 0, j = 0; src[i] != '\0' && j < n - 1; ++i)
+    for (size_t i = 0; src[i] != '\0' && j < n - 1; ++i)
     {
         if (!isspace(src[i]))
             dest[j++] = src[i];
@@ -366,6 +373,6 @@ static size_t stripWhitespace(char *dest, const char *src, size_t n)
 
     dest[j] = '\0';
 
-    /* Length of `dest` */
+    /* Length of dest */
     return j;
 }

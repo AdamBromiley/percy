@@ -2,9 +2,8 @@
 #define PARSER_H
 
 
+#include <complex.h>
 #include <stdint.h>
-
-#include "parameters.h"
 
 
 enum ParserErrorCode
@@ -19,14 +18,11 @@ enum ParserErrorCode
 };
 
 
-int stringToULong(unsigned long int *x, const char *nptr, unsigned long int min, unsigned long int max,
-                     char **endptr, int base);
+int stringToULong(unsigned long *x, const char *nptr, unsigned long min, unsigned long max, char **endptr, int base);
 int stringToUIntMax(uintmax_t *x, const char *nptr, uintmax_t min, uintmax_t max, char **endptr, int base);
 int stringToDouble(double *x, const char *nptr, double min, double max, char **endptr);
-int stringToImaginary(struct ComplexNumber *z, char *nptr, struct ComplexNumber min, struct ComplexNumber max,
-                         char **endptr, int *type);
-int stringToComplex(struct ComplexNumber *z, char *nptr, struct ComplexNumber min, struct ComplexNumber max,
-                       char **endptr);
+int stringToImaginary(complex *z, char *nptr, complex min, complex max, char **endptr, int *type);
+int stringToComplex(complex *z, char *nptr, complex min, complex max, char **endptr);
 
 
 #endif
