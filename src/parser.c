@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <float.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -12,31 +13,28 @@
 #include <string.h>
 
 
-enum ComplexPart
-{
-    COMPLEX_NONE,
-    COMPLEX_REAL,
-    COMPLEX_IMAGINARY
-};
+/* Minimum/maximum possible complex values */
+const complex CMPLX_MIN = -(DBL_MAX) - DBL_MAX * I;
+const complex CMPLX_MAX = DBL_MAX + DBL_MAX * I;
 
 
-/* Symbols to denote the imaginary unit */
-static const char IMAGINARY_UPPER = 'I';
-static const char IMAGINARY_LOWER = 'i';
+/* Symbol to denote the imaginary unit (case-insensitive) */
+static const char IMAGINARY_UNIT = 'i';
 
 
+static int parseMemoryUnit(char *str, char **endptr);
 static int parseSign(char *c, char **endptr);
-static int parseImaginaryUnit(char *c, char **endptr);
+static ComplexPt parseImaginaryUnit(char *c, char **endptr);
 static size_t stripWhitespace(char *dest, const char *src, size_t n);
 
 
 /* Convert string to unsigned long and handle errors */
-int stringToULong(unsigned long *x, const char *nptr, unsigned long min, unsigned long max, char **endptr, int base)
+ParseErr stringToULong(unsigned long *x, const char *nptr, unsigned long min, unsigned long max, char **endptr, int base)
 {
     char sign;
 
     if ((base < 2 && base != 0) || base > 36)
-        return PARSER_EBASE;
+        return PARSE_EBASE;
 
     /* Get pointer to start of number */
     while (isspace(*nptr))
@@ -49,33 +47,33 @@ int stringToULong(unsigned long *x, const char *nptr, unsigned long min, unsigne
     
     /* Conversion check */
     if (*endptr == nptr || errno == EINVAL)
-        return PARSER_ERROR;
+        return PARSE_EERR;
     
     /* Range checks */
     if (errno == ERANGE)
-        return PARSER_ERANGE;
+        return PARSE_ERANGE;
     else if (*x < min)
-        return PARSER_EMIN;
+        return PARSE_EMIN;
     else if (*x > max)
-        return PARSER_EMAX;
+        return PARSE_EMAX;
     else if (sign == '-' && *x != 0)
-        return PARSER_EMIN;
+        return PARSE_EMIN;
 
     /* Successful but more characters in string */
     if (**endptr != '\0')
-        return PARSER_EEND;
+        return PARSE_EEND;
 
-    return PARSER_NONE;
+    return PARSE_SUCCESS;
 }
 
 
 /* Convert string to uintmax_t and handle errors */
-int stringToUIntMax(uintmax_t *x, const char *nptr, uintmax_t min, uintmax_t max, char **endptr, int base)
+ParseErr stringToUIntMax(uintmax_t *x, const char *nptr, uintmax_t min, uintmax_t max, char **endptr, int base)
 {
     char sign;
 
     if ((base < 2 && base != 0) || base > 36)
-        return PARSER_EBASE;
+        return PARSE_EBASE;
 
     /* Get pointer to start of number */
     while (isspace(*nptr))
@@ -88,49 +86,49 @@ int stringToUIntMax(uintmax_t *x, const char *nptr, uintmax_t min, uintmax_t max
     
     /* Conversion check */
     if (*endptr == nptr || errno == EINVAL)
-        return PARSER_ERROR;
+        return PARSE_EERR;
     
     /* Range checks */
     if (errno == ERANGE)
-        return PARSER_ERANGE;
+        return PARSE_ERANGE;
     else if (*x < min)
-        return PARSER_EMIN;
+        return PARSE_EMIN;
     else if (*x > max)
-        return PARSER_EMAX;
+        return PARSE_EMAX;
     else if (sign == '-' && *x != 0)
-        return PARSER_EMIN;
+        return PARSE_EMIN;
 
     /* Successful but more characters in string */
     if (**endptr != '\0')
-        return PARSER_EEND;
+        return PARSE_EEND;
 
-    return PARSER_NONE;
+    return PARSE_SUCCESS;
 }
 
 
 /* Convert string to double and handle errors */
-int stringToDouble(double *x, const char *nptr, double min, double max, char **endptr)
+ParseErr stringToDouble(double *x, const char *nptr, double min, double max, char **endptr)
 {
     errno = 0;
     *x = strtod(nptr, endptr);
     
     /* Conversion check */
     if (*endptr == nptr)
-        return PARSER_ERROR;
+        return PARSE_EERR;
     
     /* Range checks */
     if (errno == ERANGE)
-        return PARSER_ERANGE;
+        return PARSE_ERANGE;
     else if (*x < min)
-        return PARSER_EMIN;
+        return PARSE_EMIN;
     else if (*x > max)
-        return PARSER_EMAX;
+        return PARSE_EMAX;
     
     /* Successful but more characters in string */
     if (**endptr != '\0')
-        return PARSER_EEND;
+        return PARSE_EEND;
 
-    return PARSER_NONE;
+    return PARSE_SUCCESS;
 }
 
 
@@ -145,12 +143,12 @@ int stringToDouble(double *x, const char *nptr, double min, double max, char **e
  *   - It can be preceded by an optional '+' or '-' sign
  *   - An imaginary number must be followed by the imaginary unit
  */
-int stringToImaginary(complex *z, char *nptr, complex min, complex max, char **endptr, int *type)
+ParseErr stringToComplexPart(complex *z, char *nptr, complex min, complex max, char **endptr, ComplexPt *type)
 {
     double x;
 
     int sign;
-    enum ParserErrorCode parseError;
+    ParseErr parseError;
 
     /* 
      * Manually parsing the sign enables detection of a complex unit lacking in
@@ -168,20 +166,20 @@ int stringToImaginary(complex *z, char *nptr, complex min, complex max, char **e
     nptr = *endptr;
 
     if (parseSign(nptr, endptr))
-        return PARSER_ERROR;
+        return PARSE_EFORM;
 
     nptr = *endptr;
     parseError = stringToDouble(&x, nptr, -(DBL_MAX), DBL_MAX, endptr);
 
-    if (parseError == PARSER_ERROR)
+    if (parseError == PARSE_EERR)
     {
-        if (**endptr != IMAGINARY_UPPER && **endptr != IMAGINARY_LOWER)
-            return PARSER_ERROR;
+        if (toupper(**endptr) != toupper(IMAGINARY_UNIT))
+            return PARSE_EFORM;
 
         /* Failed conversion must be an imaginary unit without coefficient */
         x = 1.0;
     }
-    else if (parseError != PARSER_NONE && parseError != PARSER_EEND)
+    else if (parseError != PARSE_SUCCESS && parseError != PARSE_EEND)
     {
         return parseError;
     }
@@ -195,16 +193,16 @@ int stringToImaginary(complex *z, char *nptr, complex min, complex max, char **e
     {
         case COMPLEX_REAL:
             if (x < creal(min) || x > creal(max))
-                return PARSER_ERANGE;
+                return PARSE_ERANGE;
             *z = x + cimag(*z) * I;
-            return PARSER_NONE;
+            return PARSE_SUCCESS;
         case COMPLEX_IMAGINARY:
             if (x < cimag(min) || x > cimag(max))
-                return PARSER_ERANGE;
+                return PARSE_ERANGE;
             *z = creal(*z) + x * I;
-            return PARSER_NONE;
+            return PARSE_SUCCESS;
         default:
-            return PARSER_ERROR;
+            return PARSE_EERR;
     }
 }
 
@@ -224,19 +222,20 @@ int stringToImaginary(complex *z, char *nptr, complex min, complex max, char **e
  *     invalid)
  *   - Either parts can be omitted - the missing part will be interpreted as 0.0
  */
-int stringToComplex(complex *z, char *nptr, complex min, complex max, char **endptr)
+ParseErr stringToComplex(complex *z, char *nptr, complex min, complex max, char **endptr)
 {
     char *buffer;
     size_t nptrSize = strlen(nptr) + 1;
 
-    int parseError, type;
+    ParseErr parseError;
+    ComplexPt type;
     bool reFlag = 0, imFlag = 0;
     int operator;
 
     buffer = malloc(nptrSize);
     
     if (!buffer)
-        return PARSER_ERROR;
+        return PARSE_EERR;
 
     stripWhitespace(buffer, nptr, nptrSize);
 
@@ -246,9 +245,9 @@ int stringToComplex(complex *z, char *nptr, complex min, complex max, char **end
     *z = 0.0 + 0.0 * I;
 
     /* Get first operand in complex number */
-    parseError = stringToImaginary(z, nptr, min, max, endptr, &type);
+    parseError = stringToComplexPart(z, nptr, min, max, endptr, &type);
 
-    if (parseError != PARSER_NONE)
+    if (parseError != PARSE_SUCCESS)
     {
         free(buffer);
         return parseError;
@@ -264,13 +263,13 @@ int stringToComplex(complex *z, char *nptr, complex min, complex max, char **end
             break;
         default:
             free(buffer);
-            return PARSER_ERROR;
+            return PARSE_EERR;
     }
 
     if (**endptr == '\0')
     {
         free(buffer);
-        return PARSER_NONE;
+        return PARSE_SUCCESS;
     }
 
     /* Get operator between the two parts */
@@ -280,14 +279,14 @@ int stringToComplex(complex *z, char *nptr, complex min, complex max, char **end
     if (!operator)
     {
         free(buffer);
-        return PARSER_ERROR;
+        return PARSE_EFORM;
     }
 
     /* Get second operand in complex number */
     nptr = *endptr;
-    parseError = stringToImaginary(z, nptr, min, max, endptr, &type);
+    parseError = stringToComplexPart(z, nptr, min, max, endptr, &type);
 
-    if (parseError != PARSER_NONE)
+    if (parseError != PARSE_SUCCESS)
     {
         free(buffer);
         return parseError;
@@ -305,22 +304,130 @@ int stringToComplex(complex *z, char *nptr, complex min, complex max, char **end
             break;
         default:
             free(buffer);
-            return PARSER_ERROR;
+            return PARSE_EERR;
     }
 
     if (**endptr != '\0')
     {
         free(buffer);
-        return PARSER_EEND;
+        return PARSE_EEND;
     }
 
     free(buffer);
 
     /* If both flags have not been set */
     if (!reFlag || !imFlag)
-        return PARSER_ERROR;
+        return PARSE_EERR;
 
-    return PARSER_NONE;
+    return PARSE_SUCCESS;
+}
+
+
+/* 
+ * Parse a positive double with optional memory unit suffix (if omitted,
+ * magnitude will be that of the magnitude argument) into a size_t value
+ */
+ParseErr stringToMemory(size_t *bytes, char *nptr, size_t min, size_t max, char **endptr, int magnitude)
+{
+    char *buffer;
+    size_t nptrSize = strlen(nptr) + 1;
+
+    double x;
+    int prefix;
+
+    ParseErr parseError;
+
+    buffer = malloc(nptrSize);
+
+    if (!buffer)
+        return PARSE_EERR;
+
+    stripWhitespace(buffer, nptr, nptrSize);
+
+    nptr = buffer;
+    *endptr = nptr;
+
+    parseError = stringToDouble(&x, nptr, 0.0, DBL_MAX, endptr);
+
+    if (parseError == PARSE_SUCCESS)
+    {
+        prefix = magnitude;
+    }
+    else if (parseError == PARSE_EEND)
+    {
+        nptr = *endptr;
+        prefix = parseMemoryUnit(nptr, endptr);
+
+        if (prefix < 0)
+        {
+            free(buffer);
+            return PARSE_EFORM;
+        }
+    }
+    else
+    {
+        free(buffer);
+        return parseError;
+    }
+
+    x *= pow(10.0, prefix);
+
+    if (x < 0.0 || x > SIZE_MAX)
+    {
+        free(buffer);
+        return PARSE_ERANGE;
+    }
+
+    *bytes = (size_t) x;
+
+    if (*bytes < min)
+    {
+        free(buffer);
+        return PARSE_EMIN;
+    }
+    else if (*bytes > max)
+    {
+        free(buffer);
+        return PARSE_EMAX;
+    }
+
+    if (**endptr != '\0')
+    {
+        free(buffer);
+        return PARSE_EEND;
+    }
+    
+    free(buffer);
+
+    return PARSE_SUCCESS;
+}
+
+
+static int parseMemoryUnit(char *str, char **endptr)
+{
+    const char BYTE_UNIT = 'B';
+    const char BYTE_PREFIXES[] = {'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'};
+    
+    int magnitude = 0;
+
+    *endptr = str;
+
+    for (unsigned int i = 0; i < sizeof(BYTE_PREFIXES) / sizeof(char); ++i)
+    {
+        if (toupper(*str) == toupper(BYTE_PREFIXES[i]))
+        {
+            magnitude = ((signed) i + 1) * 3;
+            ++(*endptr);
+            break;
+        }
+    }
+
+    if (toupper(**endptr) != toupper(BYTE_UNIT))
+        return -1;
+    
+    ++(*endptr);
+
+    return magnitude;
 }
 
 
@@ -344,11 +451,11 @@ static int parseSign(char *c, char **endptr)
 
 
 /* Parse the imaginary unit, or lack thereof */
-static int parseImaginaryUnit(char *c, char **endptr)
+static ComplexPt parseImaginaryUnit(char *c, char **endptr)
 {
     *endptr = c;
 
-    if (*c != IMAGINARY_UPPER && *c != IMAGINARY_LOWER)
+    if (toupper(*c) != toupper(IMAGINARY_UNIT))
         return COMPLEX_REAL;
 
     ++(*endptr);
