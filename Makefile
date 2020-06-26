@@ -5,9 +5,9 @@
 
 
 # Output dynamic library
-_OUT = libpercy.so
+_OUT = percy
 OUTDIR = .
-OUT = $(OUTDIR)/$(_OUT)
+OUT = $(OUTDIR)/lib$(_OUT).so
 
 # Source code
 _SRC = parser.c
@@ -24,12 +24,21 @@ _OBJS = parser.o
 ODIR = obj
 OBJS = $(patsubst %,$(ODIR)/%,$(_OBJS))
 
+# Files to compile for testing/demonstration
+TOUT = percy_demo
+TDIR = test
+TEST = $(TDIR)/percy_demo.c $(HDIR)/parser.h
+
 
 
 
 # Include directories
 _IDIRS = include
 IDIRS = $(patsubst %,-I%,$(_IDIRS))
+
+# Libraries to be linked with `-l`
+_LDLIBS = m
+LDLIBS = $(patsubst %,-l%,$(_LDLIBS))
 
 
 
@@ -60,14 +69,15 @@ LDFLAGS = $(LDLIBS) $(LDOPT) -shared
 
 
 
-.PHONY: all
+.PHONY: all demo
 all: $(OUT)
+demo: $(TOUT)
 
 
 
 
 # Compile source into object files
-$(OBJS): $(ODIR)/%.o: $(SDIR)/%.c
+$(OBJS): $(ODIR)/%.o: $(SDIR)/%.c $(DEPS)
 	@ mkdir -p $(ODIR)
 	$(CC) -c $< $(CFLAGS) -o $@
 
@@ -76,9 +86,17 @@ $(OUT): $(OBJS)
 	$(LD) $(OBJS) $(LDFLAGS) -o $(OUT)
 
 
+# Simple compile of demonstration script
+$(TOUT): $(OUT)
+	$(CC) $(TEST) -L$(OUTDIR) -Wl,-rpath=$(OUTDIR) -l$(_OUT) $(CFLAGS) -o $(TOUT)
 
 
-.PHONY: clean
+
+
+.PHONY: clean-all clean clean-demo
 # Remove object files and dynamic library
+clean-all: clean clean-demo
 clean:
 	rm -f $(OBJS) $(OUT)
+clean-demo:
+	rm -f $(TOUT)
