@@ -146,15 +146,13 @@ ParseErr stringToDouble(double *x, const char *nptr, double min, double max, cha
 ParseErr stringToComplexPart(complex *z, char *nptr, complex min, complex max, char **endptr, ComplexPt *type)
 {
     double x;
-
-    int sign;
     ParseErr parseError;
 
     /* 
      * Manually parsing the sign enables detection of a complex unit lacking in
      * a coefficient but having a '+'/'-' sign
      */
-    sign = parseSign(nptr, endptr);
+    int sign = parseSign(nptr, endptr);
 
     if (!sign)
         sign = 1;
@@ -224,20 +222,19 @@ ParseErr stringToComplexPart(complex *z, char *nptr, complex min, complex max, c
  */
 ParseErr stringToComplex(complex *z, char *nptr, complex min, complex max, char **endptr)
 {
-    char *buffer;
-    size_t nptrSize = strlen(nptr) + 1;
+    int operator;
+    ComplexPt type;
+    bool reFlag = false, imFlag = false;
 
     ParseErr parseError;
-    ComplexPt type;
-    bool reFlag = 0, imFlag = 0;
-    int operator;
 
-    buffer = malloc(nptrSize);
+    size_t bufferSize = strlen(nptr) + 1;
+    char *buffer = malloc(bufferSize);
     
     if (!buffer)
         return PARSE_EERR;
 
-    stripWhitespace(buffer, nptr, nptrSize);
+    stripWhitespace(buffer, nptr, bufferSize);
 
     nptr = buffer;
     *endptr = nptr;
@@ -329,20 +326,18 @@ ParseErr stringToComplex(complex *z, char *nptr, complex min, complex max, char 
  */
 ParseErr stringToMemory(size_t *bytes, char *nptr, size_t min, size_t max, char **endptr, int magnitude)
 {
-    char *buffer;
-    size_t nptrSize = strlen(nptr) + 1;
-
     double x;
-    int prefix;
+    int unitPrefix;
 
     ParseErr parseError;
 
-    buffer = malloc(nptrSize);
+    size_t bufferSize = strlen(nptr) + 1;
+    char *buffer = malloc(bufferSize);
 
     if (!buffer)
         return PARSE_EERR;
 
-    stripWhitespace(buffer, nptr, nptrSize);
+    stripWhitespace(buffer, nptr, bufferSize);
 
     nptr = buffer;
     *endptr = nptr;
@@ -351,14 +346,14 @@ ParseErr stringToMemory(size_t *bytes, char *nptr, size_t min, size_t max, char 
 
     if (parseError == PARSE_SUCCESS)
     {
-        prefix = magnitude;
+        unitPrefix = magnitude;
     }
     else if (parseError == PARSE_EEND)
     {
         nptr = *endptr;
-        prefix = parseMemoryUnit(nptr, endptr);
+        unitPrefix = parseMemoryUnit(nptr, endptr);
 
-        if (prefix < 0)
+        if (unitPrefix < 0)
         {
             free(buffer);
             return PARSE_EFORM;
@@ -370,7 +365,7 @@ ParseErr stringToMemory(size_t *bytes, char *nptr, size_t min, size_t max, char 
         return parseError;
     }
 
-    x *= pow(10.0, prefix);
+    x *= pow(10.0, unitPrefix);
 
     if (x < 0.0 || x > SIZE_MAX)
     {
