@@ -1,5 +1,10 @@
 # Changelog
 
+## 2020-06-29
+### Changed
+- `*endptr` argument will now point to final character all the time
+- Complex number parsing supports an end-pointer argument now
+
 ## 2020-06-26
 ### Added
 - Memory-value parsing with `stringToMemory()`
