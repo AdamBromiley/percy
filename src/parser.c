@@ -187,25 +187,29 @@ ParseErr stringToComplexPart(complex *z, char *nptr, complex min, complex max, c
 
     *type = parseImaginaryUnit(*endptr, endptr);
 
-    parseError = (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
-    
     switch(*type)
     {
         case COMPLEX_REAL:
-            if (x < creal(min) || x > creal(max))
-                return PARSE_ERANGE;
+            if (x < creal(min))
+                return PARSE_EMIN;
+            else if (x > creal(max))
+                return PARSE_EMAX;
 
             *z = x + cimag(*z) * I;
-            return parseError;
+            break;
         case COMPLEX_IMAGINARY:
-            if (x < cimag(min) || x > cimag(max))
-                return PARSE_ERANGE;
+            if (x < cimag(min))
+                return PARSE_EMIN;
+            else if (x > cimag(max))
+                return PARSE_EMAX;
 
             *z = creal(*z) + x * I;
-            return parseError;
+            break;
         default:
             return PARSE_EERR;
     }
+
+    return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
 }
 
 
