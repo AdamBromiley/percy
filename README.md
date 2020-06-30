@@ -77,6 +77,9 @@ A floating-point is valid input in any of the C-specified formats. This includes
 ```C
 // Parse `double`
 stringToDouble(double *x, /* ... */);
+
+// Parse `long double`
+stringToDoubleL(long double *x, /* ... */);
 ```
 
 ### Complex Numbers
@@ -90,8 +93,14 @@ The values are put into a `complex` variable, which is zero'ed before parsing to
 // Parse a real or imaginary part of `complex`
 stringToComplexPart(complex *z, /* ... */, ComplexPt *type);
 
+// Parse a real or imaginary part of `long double complex`
+stringToComplexPartL(long double complex *z, /* ... */, ComplexPt *type);
+
 // Parse `complex`
 stringToComplex(complex *z, /* ... */);
+
+// Parse `long double complex`
+stringToComplexL(long double complex *z, /* ... */);
 ```
 
 For minimum/maximum `complex` values, the following global constants are initialised:
@@ -100,6 +109,10 @@ For minimum/maximum `complex` values, the following global constants are initial
 /* Minimum/maximum possible complex values */
 extern const complex CMPLX_MIN = -(DBL_MAX) - DBL_MAX * I;
 extern const complex CMPLX_MAX = DBL_MAX + DBL_MAX * I;
+
+/* Minimum/maximum possible long double complex values */
+extern const long double complex CMPLX_MIN = -(LDBL_MAX) - LDBL_MAX * I;
+extern const long double complex CMPLX_MAX = LDBL_MAX + LDBL_MAX * I;
 ```
 
 ### Memory Values

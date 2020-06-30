@@ -1,5 +1,10 @@
 # Changelog
 
+## 2020-06-30
+### Added
+- `long double` parsing with `stringToDoubleL()`
+- `long double complex` parsing with `stringToComplexL()` and `stringToComplexPartL()`
+
 ## 2020-06-29
 ### Changed
 - `*endptr` argument will now point to final character all the time

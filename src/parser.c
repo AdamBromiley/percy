@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include <assert.h>
 #include <complex.h>
 #include <ctype.h>
 #include <errno.h>
@@ -17,6 +18,10 @@
 /* Minimum/maximum possible complex values */
 const complex CMPLX_MIN = -(DBL_MAX) - DBL_MAX * I;
 const complex CMPLX_MAX = DBL_MAX + DBL_MAX * I;
+
+/* Minimum/maximum possible long double complex values */
+const long double complex LCMPLX_MIN = -(LDBL_MAX) - LDBL_MAX * I;
+const long double complex LCMPLX_MAX = LDBL_MAX + LDBL_MAX * I;
 
 
 /* Symbol to denote the imaginary unit (case-insensitive) */
@@ -129,6 +134,29 @@ ParseErr stringToDouble(double *x, char *nptr, double min, double max, char **en
 }
 
 
+/* Convert string to long double and handle errors */
+ParseErr stringToDoubleL(long double *x, char *nptr, long double min, long double max, char **endptr)
+{
+    errno = 0;
+    *x = strtold(nptr, endptr);
+    
+    /* Conversion check */
+    if (*endptr == nptr)
+        return PARSE_EERR;
+    
+    /* Range checks */
+    if (errno == ERANGE)
+        return PARSE_ERANGE;
+    else if (*x < min)
+        return PARSE_EMIN;
+    else if (*x > max)
+        return PARSE_EMAX;
+    
+    /* If more characters in string */
+    return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
+}
+
+
 /* 
  * Parse a string as an imaginary or real double
  *
@@ -214,6 +242,87 @@ ParseErr stringToComplexPart(complex *z, char *nptr, complex min, complex max, c
 
 
 /* 
+ * Parse a string as an imaginary or real long double
+ *
+ * Where:
+ *   - The format is that of a `double` type - meaning a decimal, additional 
+ *     exponent part, and hexadecimal sequence are all valid inputs
+ *   - Whitespace will be stripped
+ *   - The operator can be '+' or '-'
+ *   - It can be preceded by an optional '+' or '-' sign
+ *   - An imaginary number must be followed by the imaginary unit
+ */
+ParseErr stringToComplexPartL(long double complex *z, char *nptr, long double complex min, long double complex max,
+                                char **endptr, ComplexPt *type)
+{
+    long double x;
+    int sign;
+    ParseErr parseError;
+
+    *endptr = nptr;
+
+    /* Get pointer to start of number */
+    while (isspace(**endptr))
+        ++(*endptr);
+
+    /* 
+     * Manually parsing the sign enables detection of a complex unit lacking in
+     * a coefficient but having a '+'/'-' sign
+     */
+    sign = parseSign(*endptr, endptr);
+
+    if (!sign)
+        sign = 1;
+
+    /*
+     * Because the sign has been manually parsed, error on a second sign, which
+     * strtod() will not detect
+     */
+    if (parseSign(*endptr, endptr))
+        return PARSE_EFORM;
+
+    parseError = stringToDoubleL(&x, *endptr, -(LDBL_MAX), LDBL_MAX, endptr);
+
+    if (parseError == PARSE_EERR)
+    {
+        if (toupper(**endptr) != toupper(IMAGINARY_UNIT))
+            return PARSE_EFORM;
+
+        /* Failed conversion must be an imaginary unit without coefficient */
+        x = 1.0L;
+    }
+    else if (parseError != PARSE_SUCCESS && parseError != PARSE_EEND)
+    {
+        return parseError;
+    }
+
+    x *= sign;
+
+    *type = parseImaginaryUnit(*endptr, endptr);
+
+    parseError = (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
+    
+    switch(*type)
+    {
+        case COMPLEX_REAL:
+            if (x < creall(min) || x > creall(max))
+                return PARSE_ERANGE;
+
+            *z = x + cimagl(*z) * I;
+            return parseError;
+        case COMPLEX_IMAGINARY:
+            if (x < cimagl(min) || x > cimagl(max))
+                return PARSE_ERANGE;
+
+            *z = creall(*z) + x * I;
+            return parseError;
+        default:
+            return PARSE_EERR;
+    }
+}
+
+
+/* 
  * Parse a complex number string into a complex variable
  * 
  * Input must be of the form:
@@ -292,6 +401,96 @@ ParseErr stringToComplex(complex *z, char *nptr, complex min, complex max, char 
             break;
         case COMPLEX_IMAGINARY:
             *z = creal(*z) + operator * cimag(secondZPart) * I;
+            break;
+        default:
+            *endptr = partEndptr;
+            return PARSE_EEND;
+    }
+
+    return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
+}
+
+
+/* 
+ * Parse a long double complex number string into a complex variable
+ * 
+ * Input must be of the form:
+ *   "a + bi" or
+ *   "bi + a"
+ * 
+ * Where each part, `a` and `bi`, is parsed according to stringToImaginary():
+ *   - The operator can be '+' or '-'
+ *   - `a` and `bi` can be preceded by an optional '+' or '-' sign (independant
+ *     of the expression's operator)
+ *   - There cannot be multiple real or imaginary parts (e.g. "a + b + ci" is
+ *     invalid)
+ *   - Either parts can be omitted - the missing part will be interpreted as 0.0
+ */
+ParseErr stringToComplexL(long double complex *z, char *nptr, long double complex min, long double complex max,
+                             char **endptr)
+{
+    ComplexPt firstType, secondType;
+    char *partEndptr;
+    int operator;
+    long double complex secondZPart;
+
+    ParseErr parseError;
+
+    *endptr = nptr;
+
+    /* Get pointer to start of number */
+    while (isspace(**endptr))
+        ++(*endptr);
+
+    *z = 0.0L + 0.0L * I;
+
+    /* Get first operand in complex number */
+    parseError = stringToComplexPartL(z, *endptr, min, max, endptr, &firstType);
+
+    if (parseError == PARSE_SUCCESS)
+        return PARSE_SUCCESS;
+    else if (parseError != PARSE_EEND)
+        return parseError;
+
+    /* 
+     * Record the end of the first part. Any future parse errors should set
+     * *endptr back to this and return PARSE_EEND, hence telling the user only
+     * the first part was parsed
+     */
+    partEndptr = *endptr;
+
+    /* Get operator between the two parts */
+    operator = parseSign(*endptr, endptr);
+
+    if (!operator)
+    {
+        *endptr = partEndptr;
+        return PARSE_EEND;
+    }
+
+    /* Get second operand in complex number */
+    parseError = stringToComplexPartL(&secondZPart, *endptr, min, max, endptr, &secondType);
+
+    if (parseError != PARSE_SUCCESS && parseError != PARSE_EEND)
+    {
+        *endptr = partEndptr;
+        return PARSE_EEND;
+    }
+
+    if (firstType == secondType)
+    {
+        *endptr = partEndptr;
+        return PARSE_EEND;
+    }
+
+    /* Set correct part of *z, dependent on the first parsed part's type */
+    switch (secondType)
+    {
+        case COMPLEX_REAL:
+            *z = operator * creall(secondZPart) + cimagl(*z) * I;
+            break;
+        case COMPLEX_IMAGINARY:
+            *z = creall(*z) + operator * cimagl(secondZPart) * I;
             break;
         default:
             *endptr = partEndptr;
