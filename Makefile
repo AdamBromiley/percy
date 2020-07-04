@@ -37,7 +37,7 @@ _IDIRS = include
 IDIRS = $(patsubst %,-I%,$(_IDIRS))
 
 # Libraries to be linked with `-l`
-_LDLIBS = m
+_LDLIBS = m mpfr gmp
 LDLIBS = $(patsubst %,-l%,$(_LDLIBS))
 
 
