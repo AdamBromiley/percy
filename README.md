@@ -7,6 +7,12 @@ Percy Parser is a set of wrappers around the standard C library `strtoX()` funct
 - Complex number parsing support
 - Memory value parsing (with or without units)
 
+## Dependencies
+The following dependencies must be installed to system:
+- The [GNU Multiple Precision Arithmetic Library](https://gmplib.org/) (GMP), version 5.0.0 or later
+- The [GNU Multiple Precision Floating-Point Reliable Library](https://www.mpfr.org/) (MPFR), version 3.0.0 or later
+- The [GNU Multiple Precision Complex Library](http://www.multiprecision.org/mpc/home.html) (MPC)
+
 ## Installation
 `make` from the project's root directory to build the `libpercy.so` shared object.
 
@@ -60,6 +66,18 @@ The return type of every function is `ParseErr`, an integer type defining a vari
 | `PARSE_EBASE`   | Invalid radix specified in the function argument |
 | `PARSE_EFORM`   | Invalid format of the inputted string (if not caught as `PARSE_EERR`) |
 
+### Arbitrary-precision Numbers
+Percy Parser also supports arbitrary-precision number parsing via the GNU Multiple Precision Floating-Point Reliable Library (MPFR) and it's complex extension, the GNU Multiple Precision Complex Library (MPC).
+
+These extensions provide the following general function signature:
+```C
+ParseErr stringToType(type *x, char *nptr, type *min, type *max, char **endptr, /* additional parameters */);
+```
+
+Unlike the standard C type parsing, arbitrary-precision parsing requries the minimum and maximum values to be pointers to allow for the value `NULL` to specify no limit (because there is no `MPFR_MAX`, for example.)
+
+`x` must be initialised first with its type's respective initialisation function (for example, for `mpfr_t`, the function `mpfr_init2()` or similar) - it hence must also be freed at some point after.
+
 ## Parsing Functions
 ### Integers
 
@@ -80,6 +98,9 @@ stringToDouble(double *x, /* ... */);
 
 // Parse `long double`
 stringToDoubleL(long double *x, /* ... */);
+
+// Parse `mpfr_t`
+stringToMPFR(mpfr_t *x, )
 ```
 
 ### Complex Numbers
@@ -123,6 +144,37 @@ If no unit is provided, the magnitude is assumed to be that of the `int magnitud
 ```C
 // Parse `size_t` with optional memory unit suffix
 stringToMemory(size_t *bytes, /* ... */, int magnitude);
+```
+
+### Arbitrary-precision
+Each function works the same as its standard counterpart and accepts the same syntax. Likewise, errors returned are the same.
+
+The number variable must be initialised beforehand according to its respective library's initialisation sequence, otherwise what is returned is undefined.
+
+Each function takes the number radix, `int base`, as an argument. This must be in the range `2` to `62` - a provided `enum` can be used to add verbosity to code for any common number base, as explained in [Additional Parameters](#additional-parameters). The special base of `0` will tell the parser to automatically determine the input type, dependent on the value's prefix (`0x`, `0b`, or none).
+
+#### Floating-point
+For input of an `mpfr_t` floating-point, the base and rounding mode must be specified.
+
+`rnd` is the rounding mode for the floating-point, specified with one of the definitions provided in the MPFR library (of the form `MPFR_RNDx`.)
+```C
+// Parse `mpfr_t`
+ParseErr stringToMPFR(mpfr_t *x, /* ... */, int base, mpfr_rnd_t rnd);
+```
+
+#### Complex
+Input of an `mpc_t` type requires the same formatting as the [standard complex type](#complex-numbers).
+
+The precision (number of significant bits) of the value must be specified, which is a positive integer of type `mpfr_prec_t`, defined in the MPFR library.
+
+The rounding mode should be a definition from the MPC library, which should be of the form `MPC_RNDxy`.
+
+```C
+// Parse a real or imaginary part of `mpc_t`
+ParseErr stringToComplexPartMPC(mpc_t *z, /* ... */, int base, mpfr_prec_t prec, mpc_rnd_t rnd, ComplexPt *type);
+
+// Parse `mpc_t`
+ParseErr stringToComplexMPC(mpc_t *z, /* ... */, int base, mpfr_prec_t prec, mpc_rnd_t rnd);
 ```
 
 ### Demonstration

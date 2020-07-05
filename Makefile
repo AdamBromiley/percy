@@ -37,7 +37,7 @@ _IDIRS = include
 IDIRS = $(patsubst %,-I%,$(_IDIRS))
 
 # Libraries to be linked with `-l`
-_LDLIBS = m
+_LDLIBS = m mpc mpfr gmp
 LDLIBS = $(patsubst %,-l%,$(_LDLIBS))
 
 
@@ -88,7 +88,7 @@ $(OUT): $(OBJS)
 
 # Simple compile of demonstration script
 $(TOUT): $(OUT)
-	$(CC) $(TEST) -L$(OUTDIR) -Wl,-rpath=$(OUTDIR) -l$(_OUT) $(CFLAGS) -o $(TOUT)
+	$(CC) $(TEST) -L$(OUTDIR) -Wl,-rpath=$(OUTDIR) -l$(_OUT) -lm -lmpc -lmpfr -lgmp $(CFLAGS) -o $(TOUT)
 
 
 
