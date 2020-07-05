@@ -4,6 +4,7 @@ Percy Parser is a set of wrappers around the standard C library `strtoX()` funct
 
 ## Features
 - Wrappers around many standard `strtoX()` functions
+- Arbitrary-precision number parsing
 - Complex number parsing support
 - Memory value parsing (with or without units)
 
