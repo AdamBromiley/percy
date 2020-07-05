@@ -163,44 +163,6 @@ ParseErr stringToDoubleL(long double *x, char *nptr, long double min, long doubl
 }
 
 
-/* Convert string to MPFR floating-point and handle errors */
-ParseErr stringToMPFR(mpfr_t *x, char *nptr, mpfr_t *min, mpfr_t *max, char **endptr, int base, mpfr_rnd_t rnd)
-{
-    mpfr_flags_t mpfrErr;
-
-    if ((base < 2 && base != 0) || base > 62)
-        return PARSE_EBASE;
-
-    mpfr_clear_flags();
-    mpfr_strtofr(*x, nptr, endptr, base, rnd);
-    mpfrErr = mpfr_flags_save();
-    
-    if (mpfrErr)
-    {
-        if (mpfrErr & MPFR_FLAGS_UNDERFLOW
-            || mpfrErr & MPFR_FLAGS_OVERFLOW
-            || mpfrErr & MPFR_FLAGS_ERANGE)
-        {
-            return PARSE_ERANGE;
-        }
-
-        return PARSE_EERR;
-    }
-
-    /* If user supplied minimum and maximum */
-    if (min && max)
-    {
-        if (mpfr_cmp(*x, *min) < 0)
-            return PARSE_EMIN;
-        else if (mpfr_cmp(*x, *max) > 0)
-            return PARSE_EMAX;
-    }
-
-    /* If more characters in string */
-    return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
-}
-
-
 /* 
  * Parse a string as an imaginary or real double
  *
@@ -363,134 +325,6 @@ ParseErr stringToComplexPartL(long double complex *z, char *nptr, long double co
         default:
             return PARSE_EERR;
     }
-}
-
-
-/* 
- * Parse a string as an imaginary or real MPFR floating-point
- *
- * Where:
- *   - The format is that of an `mpc_t` type - meaning a decimal, additional 
- *     exponent part, and hexadecimal sequence are all valid inputs
- *   - Whitespace will be stripped
- *   - The operator can be '+' or '-'
- *   - It can be preceded by an optional '+' or '-' sign
- *   - An imaginary number must be followed by the imaginary unit
- */
-ParseErr stringToComplexPartMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, char **endptr,
-                                   int base, mpfr_prec_t prec, mpc_rnd_t rnd, ComplexPt *type)
-{
-    mpfr_t x;
-    int sign;
-    ParseErr parseError;
-
-    char *tmpptr;
-    mpfr_rnd_t mpfrRnd;
-
-    *endptr = nptr;
-
-    /* Get pointer to start of number */
-    while (isspace(**endptr))
-        ++(*endptr);
-
-    /* 
-     * Manually parsing the sign enables detection of a complex unit lacking in
-     * a coefficient but having a '+'/'-' sign
-     */
-    sign = parseSign(*endptr, endptr);
-
-    if (!sign)
-        sign = 1;
-
-    /*
-     * Because the sign has been manually parsed, error on a second sign, which
-     * gmp_sscanf() will not detect
-     */
-    if (parseSign(*endptr, endptr))
-        return PARSE_EFORM;
-
-    mpfr_init2(x, prec);
-
-    /* Do a dummy read of the number to apply correct rounding mode */
-    tmpptr = *endptr;
-    stringToMPFR(&x, *endptr, NULL, NULL, endptr, base, MPFR_RNDN);
-
-    if (parseImaginaryUnit(*endptr, endptr) == COMPLEX_IMAGINARY)
-        mpfrRnd = getImMPFRRound(rnd);
-    else
-        mpfrRnd = getReMPFRRound(rnd);
-    
-    if (mpfrRnd == MPFR_RNDA)
-    {
-        mpfr_clear(x);
-        return PARSE_EERR;
-    }
-
-    *endptr = tmpptr;
-    parseError = stringToMPFR(&x, *endptr, NULL, NULL, endptr, base, mpfrRnd);
-
-    if (parseError == PARSE_EERR || parseError == PARSE_EFORM)
-    {
-        if (toupper(**endptr) != toupper(IMAGINARY_UNIT))
-        {
-            mpfr_clear(x);
-            return PARSE_EFORM;
-        }
-
-        /* Failed conversion must be an imaginary unit without coefficient */
-        mpfr_set_d(x, 1.0, mpfrRnd);
-    }
-    else if (parseError != PARSE_SUCCESS && parseError != PARSE_EEND)
-    {
-        mpfr_clear(x);
-        return parseError;
-    }
-
-    if (sign == -1)
-        mpfr_neg(x, x, mpfrRnd);
-
-    *type = parseImaginaryUnit(*endptr, endptr);
-
-    switch(*type)
-    {
-        case COMPLEX_REAL:
-            if (mpfr_cmp(x, mpc_realref(*min)) < 0)
-            {
-                mpfr_clear(x);
-                return PARSE_EMIN;
-            }
-            else if (mpfr_cmp(x, mpc_realref(*max)) > 0)
-            {
-                mpfr_clear(x);
-                return PARSE_EMAX;
-            }
-
-            mpc_set_fr_fr(*z, x, mpc_imagref(*z), rnd);
-
-            break;
-        case COMPLEX_IMAGINARY:
-            if (mpfr_cmp(x, mpc_imagref(*min)) < 0)
-            {
-                mpfr_clear(x);
-                return PARSE_EMIN;
-            }
-            else if (mpfr_cmp(x, mpc_imagref(*max)) > 0)
-            {
-                mpfr_clear(x);
-                return PARSE_EMAX;
-            }
-
-            mpc_set_fr_fr(*z, mpc_realref(*z), x, rnd);
-
-            break;
-        default:
-            mpfr_clear(x);
-            return PARSE_EERR;
-    }
-
-    mpfr_clear(x);
-
-    return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
 }
 
 
@@ -674,6 +508,228 @@ ParseErr stringToComplexL(long double complex *z, char *nptr, long double comple
 
 
 /* 
+ * Parse a positive double with optional memory unit suffix (if omitted,
+ * magnitude will be that of the magnitude argument) into a size_t value
+ */
+ParseErr stringToMemory(size_t *bytes, char *nptr, size_t min, size_t max, char **endptr, int magnitude)
+{
+    double x;
+    int unitPrefix;
+    ParseErr parseError;
+
+    *endptr = nptr;
+
+    /* Get pointer to start of number */
+    while (isspace(**endptr))
+        ++(*endptr);
+
+    parseError = stringToDouble(&x, *endptr, 0.0, DBL_MAX, endptr);
+
+    if (parseError == PARSE_SUCCESS)
+    {
+        unitPrefix = magnitude;
+    }
+    else if (parseError == PARSE_EEND)
+    {
+        nptr = *endptr;
+        unitPrefix = parseMemoryUnit(nptr, endptr);
+
+        if (unitPrefix < 0)
+        {
+            *endptr = nptr;
+            unitPrefix = magnitude;
+        }
+    }
+    else
+    {
+        return parseError;
+    }
+
+    x *= pow(10.0, unitPrefix);
+
+    if (x < 0.0 || x > SIZE_MAX)
+        return PARSE_ERANGE;
+
+    *bytes = (size_t) x;
+
+    if (*bytes < min)
+        return PARSE_EMIN;
+    else if (*bytes > max)
+        return PARSE_EMAX;
+
+    return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
+}
+
+
+/* Convert string to MPFR floating-point and handle errors */
+ParseErr stringToMPFR(mpfr_t *x, char *nptr, mpfr_t *min, mpfr_t *max, char **endptr, int base, mpfr_rnd_t rnd)
+{
+    mpfr_flags_t mpfrErr;
+
+    if ((base < 2 && base != 0) || base > 62)
+        return PARSE_EBASE;
+
+    mpfr_clear_flags();
+
+    mpfr_strtofr(*x, nptr, endptr, base, rnd);
+
+    /* Inexactness is not considered an error */
+    mpfr_clear_inexflag();
+    mpfrErr = mpfr_flags_save();
+    
+    if (mpfrErr || *endptr == nptr)
+    {
+        if (mpfrErr & MPFR_FLAGS_UNDERFLOW
+            || mpfrErr & MPFR_FLAGS_OVERFLOW
+            || mpfrErr & MPFR_FLAGS_ERANGE)
+        {
+            return PARSE_ERANGE;
+        }
+
+        return PARSE_EERR;
+    }
+
+    /* If user supplied minimum and/or maximum */
+    if (min && mpfr_cmp(*x, *min) < 0)
+        return PARSE_EMIN;
+    
+    if (max && mpfr_cmp(*x, *max) > 0)
+        return PARSE_EMAX;
+
+    /* If more characters in string */
+    return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
+}
+
+
+/* 
+ * Parse a string as an imaginary or real MPFR floating-point
+ *
+ * Where:
+ *   - The format is that of an `mpc_t` type - meaning a decimal, additional 
+ *     exponent part, and hexadecimal sequence are all valid inputs
+ *   - Whitespace will be stripped
+ *   - The operator can be '+' or '-'
+ *   - It can be preceded by an optional '+' or '-' sign
+ *   - An imaginary number must be followed by the imaginary unit
+ */
+ParseErr stringToComplexPartMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, char **endptr,
+                                   int base, mpfr_prec_t prec, mpc_rnd_t rnd, ComplexPt *type)
+{
+    mpfr_t x;
+    int sign;
+    ParseErr parseError;
+
+    char *tmpptr;
+    mpfr_rnd_t mpfrRnd;
+
+    *endptr = nptr;
+
+    /* Get pointer to start of number */
+    while (isspace(**endptr))
+        ++(*endptr);
+
+    /* 
+     * Manually parsing the sign enables detection of a complex unit lacking in
+     * a coefficient but having a '+'/'-' sign
+     */
+    sign = parseSign(*endptr, endptr);
+
+    if (!sign)
+        sign = 1;
+
+    /*
+     * Because the sign has been manually parsed, error on a second sign, which
+     * gmp_sscanf() will not detect
+     */
+    if (parseSign(*endptr, endptr))
+        return PARSE_EFORM;
+
+    mpfr_init2(x, prec);
+
+    /* Do a dummy read of the number to apply correct rounding mode */
+    tmpptr = *endptr;
+    stringToMPFR(&x, *endptr, NULL, NULL, endptr, base, MPFR_RNDN);
+
+    if (parseImaginaryUnit(*endptr, endptr) == COMPLEX_IMAGINARY)
+        mpfrRnd = getImMPFRRound(rnd);
+    else
+        mpfrRnd = getReMPFRRound(rnd);
+    
+    if (mpfrRnd == MPFR_RNDA)
+    {
+        mpfr_clear(x);
+        return PARSE_EERR;
+    }
+
+    *endptr = tmpptr;
+    parseError = stringToMPFR(&x, *endptr, NULL, NULL, endptr, base, mpfrRnd);
+
+    if (parseError == PARSE_EERR || parseError == PARSE_EFORM)
+    {
+        if (toupper(**endptr) != toupper(IMAGINARY_UNIT))
+        {
+            mpfr_clear(x);
+            return PARSE_EFORM;
+        }
+
+        /* Failed conversion must be an imaginary unit without coefficient */
+        mpfr_set_d(x, 1.0, mpfrRnd);
+    }
+    else if (parseError != PARSE_SUCCESS && parseError != PARSE_EEND)
+    {
+        mpfr_clear(x);
+        return parseError;
+    }
+
+    if (sign == -1)
+        mpfr_neg(x, x, mpfrRnd);
+
+    *type = parseImaginaryUnit(*endptr, endptr);
+
+    switch(*type)
+    {
+        case COMPLEX_REAL:
+            if (min && mpfr_cmp(x, mpc_realref(*min)) < 0)
+            {
+                mpfr_clear(x);
+                return PARSE_EMIN;
+            }
+            else if (max && mpfr_cmp(x, mpc_realref(*max)) > 0)
+            {
+                mpfr_clear(x);
+                return PARSE_EMAX;
+            }
+
+            mpc_set_fr_fr(*z, x, mpc_imagref(*z), rnd);
+
+            break;
+        case COMPLEX_IMAGINARY:
+            if (min && mpfr_cmp(x, mpc_imagref(*min)) < 0)
+            {
+                mpfr_clear(x);
+                return PARSE_EMIN;
+            }
+            else if (max && mpfr_cmp(x, mpc_imagref(*max)) > 0)
+            {
+                mpfr_clear(x);
+                return PARSE_EMAX;
+            }
+
+            mpc_set_fr_fr(*z, mpc_realref(*z), x, rnd);
+
+            break;
+        default:
+            mpfr_clear(x);
+            return PARSE_EERR;
+    }
+
+    mpfr_clear(x);
+
+    return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
+}
+
+
+/* 
  * Parse a complex number string into an MPC complex variable
  * 
  * Input must be of the form:
@@ -768,60 +824,6 @@ ParseErr stringToComplexMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, char *
     }
 
     mpc_clear(secondZPart);
-
-    return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
-}
-
-
-/* 
- * Parse a positive double with optional memory unit suffix (if omitted,
- * magnitude will be that of the magnitude argument) into a size_t value
- */
-ParseErr stringToMemory(size_t *bytes, char *nptr, size_t min, size_t max, char **endptr, int magnitude)
-{
-    double x;
-    int unitPrefix;
-    ParseErr parseError;
-
-    *endptr = nptr;
-
-    /* Get pointer to start of number */
-    while (isspace(**endptr))
-        ++(*endptr);
-
-    parseError = stringToDouble(&x, *endptr, 0.0, DBL_MAX, endptr);
-
-    if (parseError == PARSE_SUCCESS)
-    {
-        unitPrefix = magnitude;
-    }
-    else if (parseError == PARSE_EEND)
-    {
-        nptr = *endptr;
-        unitPrefix = parseMemoryUnit(nptr, endptr);
-
-        if (unitPrefix < 0)
-        {
-            *endptr = nptr;
-            unitPrefix = magnitude;
-        }
-    }
-    else
-    {
-        return parseError;
-    }
-
-    x *= pow(10.0, unitPrefix);
-
-    if (x < 0.0 || x > SIZE_MAX)
-        return PARSE_ERANGE;
-
-    *bytes = (size_t) x;
-
-    if (*bytes < min)
-        return PARSE_EMIN;
-    else if (*bytes > max)
-        return PARSE_EMAX;
 
     return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
 }
