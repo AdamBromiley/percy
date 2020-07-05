@@ -1,5 +1,11 @@
 # Changelog
 
+## 2020-07-05
+### Added
+- Arbitrary-precision number support via the MPFR and MPC libraries
+- `mpfr_t` parsing with `stringToMPFR()`
+- `mpc_t` parsing with `stringToMPC()` and `stringToMPCPart()`
+
 ## 2020-06-30
 ### Added
 - `long double` parsing with `stringToDoubleL()`
