@@ -81,10 +81,10 @@ ParseErr stringToComplexL(long double complex *z, char *nptr, long double comple
 
 ParseErr stringToMemory(size_t *bytes, char *nptr, size_t min, size_t max, char **endptr, int magnitude);
 
-ParseErr stringToMPFR(mpfr_t *x, char *nptr, mpfr_t *min, mpfr_t *max, char **endptr, int base, mpfr_rnd_t rnd);
-ParseErr stringToComplexPartMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, char **endptr,
+ParseErr stringToMPFR(mpfr_t x, char *nptr, mpfr_t min, mpfr_t max, char **endptr, int base, mpfr_rnd_t rnd);
+ParseErr stringToComplexPartMPC(mpc_t z, char *nptr, mpc_t min, mpc_t max, char **endptr,
                                    int base, mpfr_prec_t prec, mpc_rnd_t rnd, ComplexPt *type);
-ParseErr stringToComplexMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, char **endptr,
+ParseErr stringToComplexMPC(mpc_t z, char *nptr, mpc_t min, mpc_t max, char **endptr,
                                int base, mpfr_prec_t prec, mpc_rnd_t rnd);
 
 size_t strncpyGraph(char *dest, const char *src, size_t n);

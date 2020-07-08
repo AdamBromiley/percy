@@ -562,7 +562,7 @@ ParseErr stringToMemory(size_t *bytes, char *nptr, size_t min, size_t max, char 
 
 
 /* Convert string to MPFR floating-point and handle errors */
-ParseErr stringToMPFR(mpfr_t *x, char *nptr, mpfr_t *min, mpfr_t *max, char **endptr, int base, mpfr_rnd_t rnd)
+ParseErr stringToMPFR(mpfr_t x, char *nptr, mpfr_t min, mpfr_t max, char **endptr, int base, mpfr_rnd_t rnd)
 {
     mpfr_flags_t mpfrErr;
 
@@ -571,7 +571,7 @@ ParseErr stringToMPFR(mpfr_t *x, char *nptr, mpfr_t *min, mpfr_t *max, char **en
 
     mpfr_clear_flags();
 
-    mpfr_strtofr(*x, nptr, endptr, base, rnd);
+    mpfr_strtofr(x, nptr, endptr, base, rnd);
 
     /* Inexactness is not considered an error */
     mpfr_clear_inexflag();
@@ -590,10 +590,10 @@ ParseErr stringToMPFR(mpfr_t *x, char *nptr, mpfr_t *min, mpfr_t *max, char **en
     }
 
     /* If user supplied minimum and/or maximum */
-    if (min && mpfr_cmp(*x, *min) < 0)
+    if (min && mpfr_cmp(x, min) < 0)
         return PARSE_EMIN;
     
-    if (max && mpfr_cmp(*x, *max) > 0)
+    if (max && mpfr_cmp(x, max) > 0)
         return PARSE_EMAX;
 
     /* If more characters in string */
@@ -612,7 +612,7 @@ ParseErr stringToMPFR(mpfr_t *x, char *nptr, mpfr_t *min, mpfr_t *max, char **en
  *   - It can be preceded by an optional '+' or '-' sign
  *   - An imaginary number must be followed by the imaginary unit
  */
-ParseErr stringToComplexPartMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, char **endptr,
+ParseErr stringToComplexPartMPC(mpc_t z, char *nptr, mpc_t min, mpc_t max, char **endptr,
                                    int base, mpfr_prec_t prec, mpc_rnd_t rnd, ComplexPt *type)
 {
     mpfr_t x;
@@ -648,7 +648,7 @@ ParseErr stringToComplexPartMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, ch
 
     /* Do a dummy read of the number to apply correct rounding mode */
     tmpptr = *endptr;
-    stringToMPFR(&x, *endptr, NULL, NULL, endptr, base, MPFR_RNDN);
+    stringToMPFR(x, *endptr, NULL, NULL, endptr, base, MPFR_RNDN);
 
     if (parseImaginaryUnit(*endptr, endptr) == COMPLEX_IMAGINARY)
         mpfrRnd = getImMPFRRound(rnd);
@@ -662,7 +662,7 @@ ParseErr stringToComplexPartMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, ch
     }
 
     *endptr = tmpptr;
-    parseError = stringToMPFR(&x, *endptr, NULL, NULL, endptr, base, mpfrRnd);
+    parseError = stringToMPFR(x, *endptr, NULL, NULL, endptr, base, mpfrRnd);
 
     if (parseError == PARSE_EERR || parseError == PARSE_EFORM)
     {
@@ -689,33 +689,33 @@ ParseErr stringToComplexPartMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, ch
     switch(*type)
     {
         case COMPLEX_REAL:
-            if (min && mpfr_cmp(x, mpc_realref(*min)) < 0)
+            if (min && mpfr_cmp(x, mpc_realref(min)) < 0)
             {
                 mpfr_clear(x);
                 return PARSE_EMIN;
             }
-            else if (max && mpfr_cmp(x, mpc_realref(*max)) > 0)
+            else if (max && mpfr_cmp(x, mpc_realref(max)) > 0)
             {
                 mpfr_clear(x);
                 return PARSE_EMAX;
             }
 
-            mpc_set_fr_fr(*z, x, mpc_imagref(*z), rnd);
+            mpc_set_fr_fr(z, x, mpc_imagref(z), rnd);
 
             break;
         case COMPLEX_IMAGINARY:
-            if (min && mpfr_cmp(x, mpc_imagref(*min)) < 0)
+            if (min && mpfr_cmp(x, mpc_imagref(min)) < 0)
             {
                 mpfr_clear(x);
                 return PARSE_EMIN;
             }
-            else if (max && mpfr_cmp(x, mpc_imagref(*max)) > 0)
+            else if (max && mpfr_cmp(x, mpc_imagref(max)) > 0)
             {
                 mpfr_clear(x);
                 return PARSE_EMAX;
             }
 
-            mpc_set_fr_fr(*z, mpc_realref(*z), x, rnd);
+            mpc_set_fr_fr(z, mpc_realref(z), x, rnd);
 
             break;
         default:
@@ -744,7 +744,7 @@ ParseErr stringToComplexPartMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, ch
  *     invalid)
  *   - Either parts can be omitted - the missing part will be interpreted as 0.0
  */
-ParseErr stringToComplexMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, char **endptr,
+ParseErr stringToComplexMPC(mpc_t z, char *nptr, mpc_t min, mpc_t max, char **endptr,
                                int base, mpfr_prec_t prec, mpc_rnd_t rnd)
 {
     ComplexPt firstType, secondType;
@@ -760,7 +760,7 @@ ParseErr stringToComplexMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, char *
     while (isspace(**endptr))
         ++(*endptr);
 
-    mpc_set_d_d(*z, 0.0, 0.0, rnd);
+    mpc_set_d_d(z, 0.0, 0.0, rnd);
 
     /* Get first operand in complex number */
     parseError = stringToComplexPartMPC(z, *endptr, min, max, endptr, base, prec, rnd, &firstType);
@@ -789,7 +789,7 @@ ParseErr stringToComplexMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, char *
     mpc_init2(secondZPart, prec);
 
     /* Get second operand in complex number */
-    parseError = stringToComplexPartMPC(&secondZPart, *endptr, min, max, endptr, base, prec, rnd, &secondType);
+    parseError = stringToComplexPartMPC(secondZPart, *endptr, min, max, endptr, base, prec, rnd, &secondType);
 
     if (parseError != PARSE_SUCCESS && parseError != PARSE_EEND)
     {
@@ -808,14 +808,14 @@ ParseErr stringToComplexMPC(mpc_t *z, char *nptr, mpc_t *min, mpc_t *max, char *
     if (operator == -1)
         mpc_neg(secondZPart, secondZPart, rnd);
 
-    /* Set correct part of *z, dependent on the first parsed part's type */
+    /* Set correct part of z, dependent on the first parsed part's type */
     switch (secondType)
     {
         case COMPLEX_REAL:
-            mpc_set_fr_fr(*z, mpc_realref(secondZPart), mpc_imagref(*z), rnd);
+            mpc_set_fr_fr(z, mpc_realref(secondZPart), mpc_imagref(z), rnd);
             break;
         case COMPLEX_IMAGINARY:
-            mpc_set_fr_fr(*z, mpc_realref(*z), mpc_imagref(secondZPart), rnd);
+            mpc_set_fr_fr(z, mpc_realref(z), mpc_imagref(secondZPart), rnd);
             break;
         default:
             *endptr = partEndptr;
