@@ -11,17 +11,21 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#ifdef MP_PREC
 #include <mpfr.h>
 #include <mpc.h>
+#endif
 
 
 int main(int argc, char **argv)
 {
     /* Maximum precision of arbitrary-precision (MPFR) numbers */
+    #ifdef MP_PREC
     const mpfr_prec_t MPFR_PREC = 512;
 
     /* Get number of significant digits in MPFR result */
     int mpfrDigits = (int) floor(MPFR_PREC / log2(10));
+    #endif
 
     /* End pointer of parsed sub-string */
     char *endptr;
@@ -29,37 +33,54 @@ int main(int argc, char **argv)
     unsigned long ulx;
     uintmax_t uintx;
     double dx;
-    mpfr_t mpfrx;
     ComplexPt cmplxPt;
     complex imagx;
     complex cmplxx;
-    mpc_t mpcx;
     size_t memx;
 
-    bool u, x, d, D, i, c, C, m;
+    #ifdef MP_PREC
+    mpfr_t mpfrx;
+    mpc_t mpcx;
+
+    bool D = false, C = false;
+    #endif
+
+    bool u, x, d, i, c, m;
 
     char *program = argv[0];
 
     int optionID;
-    const char *GETOPT_STRING = ":u:x:d:D:i:c:C:m:";
+
+    #ifdef MP_PREC
+    const char *GETOPT_STRING = ":u:x:d:i:c:m:D:C:";
+    #else
+    const char *GETOPT_STRING = ":u:x:d:i:c:m:";
+    #endif
+
     const struct option LONG_OPTIONS[] =
     {
         {"ulong", required_argument, NULL, 'u'},
         {"uintmax", required_argument, NULL, 'x'},
         {"double", required_argument, NULL, 'd'},
-        {"mpfr", required_argument, NULL, 'D'},
         {"imaginary", optional_argument, NULL, 'i'},
         {"complex", required_argument, NULL, 'c'},
-        {"mpc", required_argument, NULL, 'C'},
         {"memory", required_argument, NULL, 'm'},
+
+        #ifdef MP_PREC
+        {"mpfr", required_argument, NULL, 'D'},
+        {"mpc", required_argument, NULL, 'C'},
+        #endif
+
         {0, 0, 0, 0}
     };
 
-    u = x = d = D = i = c = C = m = false;
+    u = x = d = i = c = m = false;
 
     /* Initialise MPFR and MPC variables */
+    #ifdef MP_PREC
     mpfr_init2(mpfrx, MPFR_PREC);
     mpc_init2(mpcx, MPFR_PREC);
+    #endif
 
     opterr = 0;
     while ((optionID = getopt_long(argc, argv, GETOPT_STRING, LONG_OPTIONS, NULL)) != -1)
@@ -80,10 +101,6 @@ int main(int argc, char **argv)
                 d = true;
                 err = stringToDouble(&dx, optarg, -(DBL_MAX), DBL_MAX, &endptr);
                 break;
-            case 'D':
-                D = true;
-                err = stringToMPFR(&mpfrx, optarg, NULL, NULL, &endptr, 0, MPFR_RNDN);
-                break;
             case 'i':
                 i = true;
                 err = stringToComplexPart(&imagx, optarg, CMPLX_MIN, CMPLX_MAX, &endptr, &cmplxPt);
@@ -92,14 +109,22 @@ int main(int argc, char **argv)
                 c = true;
                 err = stringToComplex(&cmplxx, optarg, CMPLX_MIN, CMPLX_MAX, &endptr);
                 break;
-            case 'C':
-                C = true;
-                err = stringToComplexMPC(&mpcx, optarg, NULL, NULL, &endptr, 0, MPFR_PREC, MPC_RNDNN);
-                break;
             case 'm':
                 m = true;
                 err = stringToMemory(&memx, optarg, 0, SIZE_MAX, &endptr, MEM_MB);
                 break;
+            
+            #ifdef MP_PREC
+            case 'D':
+                D = true;
+                err = stringToMPFR(mpfrx, optarg, NULL, NULL, &endptr, 0, MPFR_RNDN);
+                break;
+            case 'C':
+                C = true;
+                err = stringToComplexMPC(mpcx, optarg, NULL, NULL, &endptr, 0, MPFR_PREC, MPC_RNDNN);
+                break;
+            #endif
+
             default:
                 continue;
         }
@@ -134,15 +159,17 @@ int main(int argc, char **argv)
                 break;
         }
 
+        #ifdef MP_PREC
         mpfr_clear(mpfrx);
         mpc_clear(mpcx);
+        #endif
+
         return 1;
     }
 
     if (u) printf("Unsigned long        = %lu\n", ulx);
     if (x) printf("Unsigned integer max = %" PRIuMAX "\n", uintx);
     if (d) printf("Double               = %g\n", dx);
-    if (D) mpfr_printf("MPFR floating-point  = %.*Rg\n", mpfrDigits, mpfrx);
 
     if (i) 
     {
@@ -153,17 +180,19 @@ int main(int argc, char **argv)
     }
 
     if (c) printf("Complex              = %g + %gi\n", creal(cmplxx), cimag(cmplxx));
+    if (m) printf("Memory               = %zu bytes\n", memx);
 
+    #ifdef MP_PREC
+    if (D) mpfr_printf("MPFR floating-point  = %.*Rg\n", mpfrDigits, mpfrx);
     if (C)
     {
         mpfr_printf("MPC complex          = %.*Rg + %.*Rgi\n",
             mpfrDigits, mpc_realref(mpcx), mpfrDigits, mpc_imagref(mpcx));
     }
 
-    if (m) printf("Memory               = %zu bytes\n", memx);
-
     mpfr_clear(mpfrx);
     mpc_clear(mpcx);
+    #endif
 
     return 0;
 }

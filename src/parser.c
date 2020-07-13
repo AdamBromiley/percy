@@ -14,8 +14,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef MP_PREC
 #include <mpfr.h>
 #include <mpc.h>
+#endif
 
 
 /* Minimum/maximum possible complex values */
@@ -35,8 +37,10 @@ static int parseMemoryUnit(char *str, char **endptr);
 static int parseSign(char *c, char **endptr);
 static ComplexPt parseImaginaryUnit(char *c, char **endptr);
 
+#ifdef MP_PREC
 static mpfr_rnd_t getReMPFRRound(mpc_rnd_t rnd);
 static mpfr_rnd_t getImMPFRRound(mpc_rnd_t rnd);
+#endif
 
 
 /* Convert string to unsigned long and handle errors */
@@ -561,6 +565,7 @@ ParseErr stringToMemory(size_t *bytes, char *nptr, size_t min, size_t max, char 
 }
 
 
+#ifdef MP_PREC
 /* Convert string to MPFR floating-point and handle errors */
 ParseErr stringToMPFR(mpfr_t x, char *nptr, mpfr_t min, mpfr_t max, char **endptr, int base, mpfr_rnd_t rnd)
 {
@@ -827,6 +832,7 @@ ParseErr stringToComplexMPC(mpc_t z, char *nptr, mpc_t min, mpc_t max, char **en
 
     return (**endptr == '\0') ? PARSE_SUCCESS : PARSE_EEND;
 }
+#endif
 
 
 /* 
@@ -928,6 +934,7 @@ static ComplexPt parseImaginaryUnit(char *c, char **endptr)
 }
 
 
+#ifdef MP_PREC
 /* Get real rounding mode from MPC mode */
 static mpfr_rnd_t getReMPFRRound(mpc_rnd_t rnd)
 {
@@ -960,3 +967,4 @@ static mpfr_rnd_t getImMPFRRound(mpc_rnd_t rnd)
     /* Return unused (in MPC) MPFR rounding mode on error */
     return MPFR_RNDA;
 }
+#endif

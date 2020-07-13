@@ -9,13 +9,13 @@ Percy Parser is a set of wrappers around the standard C library `strtoX()` funct
 - Memory value parsing (with or without units)
 
 ## Dependencies
-The following dependencies must be installed to system:
+The following dependencies must be installed to system **if building with** `make mp`:
 - The [GNU Multiple Precision Arithmetic Library](https://gmplib.org/) (GMP), version 5.0.0 or later
 - The [GNU Multiple Precision Floating-Point Reliable Library](https://www.mpfr.org/) (MPFR), version 3.0.0 or later
 - The [GNU Multiple Precision Complex Library](http://www.multiprecision.org/mpc/home.html) (MPC)
 
 ## Installation
-`make` from the project's root directory to build the `libpercy.so` shared object.
+`make` from the project's root directory to build the `libpercy.so` shared object. To enable arbitray-precision floating-point parsing with the MPFR and MPC libraries, build with `make mp` instead.
 
 For use with programs, refer to the following example:
 

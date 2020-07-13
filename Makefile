@@ -37,8 +37,12 @@ _IDIRS = include
 IDIRS = $(patsubst %,-I%,$(_IDIRS))
 
 # Libraries to be linked with `-l`
-_LDLIBS = m mpc mpfr gmp
+_LDLIBS = m
 LDLIBS = $(patsubst %,-l%,$(_LDLIBS))
+
+# Multi-precision libraries to be linked with `-l`
+_LDLIBS_MP = mpc mpfr gmp
+LDLIBS_MP = $(patsubst %,-l%,$(_LDLIBS_MP))
 
 
 
@@ -69,9 +73,19 @@ LDFLAGS = $(LDLIBS) $(LDOPT) -shared
 
 
 
-.PHONY: all demo
+.PHONY: all demo demomp mp
+# Build with standard-precision
 all: $(OUT)
 demo: $(TOUT)
+demomp: mp
+demomp: CFLAGS += -D"MP_PREC" -lmpc -lmpfr -lgmp
+demomp: $(TOUT)
+
+# Build with multiple-precision extension
+mp: CFLAGS += -D"MP_PREC"
+mp: LDFLAGS += $(LDLIBS_MP)
+mp: $(OUT)
+
 
 
 
@@ -88,7 +102,7 @@ $(OUT): $(OBJS)
 
 # Simple compile of demonstration script
 $(TOUT): $(OUT)
-	$(CC) $(TEST) -L$(OUTDIR) -Wl,-rpath=$(OUTDIR) -l$(_OUT) -lm -lmpc -lmpfr -lgmp $(CFLAGS) -o $(TOUT)
+	$(CC) $(TEST) -L$(OUTDIR) -Wl,-rpath=$(OUTDIR) -l$(_OUT) -lm $(CFLAGS) -o $(TOUT)
 
 
 
