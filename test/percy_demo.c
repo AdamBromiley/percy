@@ -19,8 +19,8 @@
 
 int main(int argc, char **argv)
 {
-    /* Maximum precision of arbitrary-precision (MPFR) numbers */
     #ifdef MP_PREC
+    /* Maximum precision of arbitrary-precision (MPFR) numbers */
     const mpfr_prec_t MPFR_PREC = 512;
 
     /* Get number of significant digits in MPFR result */
@@ -76,8 +76,8 @@ int main(int argc, char **argv)
 
     u = x = d = i = c = m = false;
 
-    /* Initialise MPFR and MPC variables */
     #ifdef MP_PREC
+    /* Initialise MPFR and MPC variables */
     mpfr_init2(mpfrx, MPFR_PREC);
     mpc_init2(mpcx, MPFR_PREC);
     #endif
