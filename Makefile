@@ -40,7 +40,7 @@ IDIRS = $(patsubst %,-I%,$(_IDIRS))
 _LDLIBS = m
 LDLIBS = $(patsubst %,-l%,$(_LDLIBS))
 
-# Multi-precision libraries to be linked with `-l`
+# multiple-precision libraries to be linked with `-l`
 _LDLIBS_MP = mpc mpfr gmp
 LDLIBS_MP = $(patsubst %,-l%,$(_LDLIBS_MP))
 

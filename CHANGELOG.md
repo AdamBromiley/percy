@@ -2,7 +2,7 @@
 
 ## 2020-07-05
 ### Added
-- Arbitrary-precision number support via the MPFR and MPC libraries
+- Multiple-precision number support via the MPFR and MPC libraries
 - `mpfr_t` parsing with `stringToMPFR()`
 - `mpc_t` parsing with `stringToMPC()` and `stringToMPCPart()`
 

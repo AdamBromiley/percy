@@ -4,7 +4,7 @@ Percy Parser is a set of wrappers around the standard C library `strtoX()` funct
 
 ## Features
 - Wrappers around many standard `strtoX()` functions
-- Arbitrary-precision number parsing
+- Multiple-precision number parsing
 - Complex number parsing support
 - Memory value parsing (with or without units)
 
@@ -15,7 +15,7 @@ The following dependencies must be installed to system **if building with** `mak
 - The [GNU Multiple Precision Complex Library](http://www.multiprecision.org/mpc/home.html) (MPC)
 
 ## Installation
-`make` from the project's root directory to build the `libpercy.so` shared object. To enable arbitray-precision floating-point parsing with the MPFR and MPC libraries, build with `make mp` instead.
+`make` from the project's root directory to build the `libpercy.so` shared object. To enable multiple-precision floating-point parsing with the MPFR and MPC libraries, build with `make mp` instead.
 
 For use with programs, refer to the following example:
 
@@ -67,15 +67,15 @@ The return type of every function is `ParseErr`, an integer type defining a vari
 | `PARSE_EBASE`   | Invalid radix specified in the function argument |
 | `PARSE_EFORM`   | Invalid format of the inputted string (if not caught as `PARSE_EERR`) |
 
-### Arbitrary-precision Numbers
-Percy Parser also supports arbitrary-precision number parsing via the GNU Multiple Precision Floating-Point Reliable Library (MPFR) and it's complex extension, the GNU Multiple Precision Complex Library (MPC).
+### Multiple-precision Numbers
+Percy Parser also supports multiple-precision number parsing via the GNU Multiple Precision Floating-Point Reliable Library (MPFR) and it's complex extension, the GNU Multiple Precision Complex Library (MPC).
 
 These extensions provide the following general function signature:
 ```C
 ParseErr stringToType(type *x, char *nptr, type *min, type *max, char **endptr, /* additional parameters */);
 ```
 
-Unlike the standard C type parsing, arbitrary-precision parsing requries the minimum and maximum values to be pointers to allow for the value `NULL` to specify no limit (because there is no `MPFR_MAX`, for example.)
+Unlike the standard C type parsing, multiple-precision parsing requries the minimum and maximum values to be pointers to allow for the value `NULL` to specify no limit (because there is no `MPFR_MAX`, for example.)
 
 `x` must be initialised first with its type's respective initialisation function (for example, for `mpfr_t`, the function `mpfr_init2()` or similar) - it hence must also be freed at some point after.
 
@@ -147,7 +147,7 @@ If no unit is provided, the magnitude is assumed to be that of the `int magnitud
 stringToMemory(size_t *bytes, /* ... */, int magnitude);
 ```
 
-### Arbitrary-precision
+### Multiple-precision
 Each function works the same as its standard counterpart and accepts the same syntax. Likewise, errors returned are the same.
 
 The number variable must be initialised beforehand according to its respective library's initialisation sequence, otherwise what is returned is undefined.
